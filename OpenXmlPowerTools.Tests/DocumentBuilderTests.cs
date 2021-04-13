@@ -859,6 +859,42 @@ namespace OxPt
             Validate(outFi);
         }
 
+        [Fact]
+        public void DB017_MergeTableWithSameName_Handling()
+        {
+	        DirectoryInfo sourceDir = new DirectoryInfo("../../../../TestFiles/");
+	        FileInfo source1 =
+		        new FileInfo(Path.Combine(sourceDir.FullName, "DB017_MergeTableWithSameName_Handling_Source1.docx"));
+	        FileInfo source2 = new FileInfo(Path.Combine(sourceDir.FullName, "DB017_MergeTableWithSameName_Handling_Source2.docx"));
+	        List<Source> sources = null;
+
+	        sources = new List<Source>()
+	        {
+		        new Source(new WmlDocument(source1.FullName)),
+		        new Source(new WmlDocument(source2.FullName)),
+	        };
+	        var processedDestDocx = new FileInfo(Path.Combine(TestUtil.TempDir.FullName, "DB017_MergeTableWithSameName_Handling_Result.docx"));
+	        DocumentBuilder.BuildDocument(sources, processedDestDocx.FullName);
+
+	        Validate(processedDestDocx);
+
+	        using (WordprocessingDocument wDoc = WordprocessingDocument.Open(processedDestDocx.FullName, false))
+	        {
+		        var styles = wDoc.MainDocumentPart.StyleDefinitionsPart.GetXDocument().Root.Elements(W.style).ToArray();
+		        var allTableStyles = styles.Where(e => e.Attribute(W.styleId).Value.StartsWith("a4")).ToArray();
+		        Assert.Equal(2, allTableStyles.Length);
+		        var stylesWithTblProperty = allTableStyles.SelectMany(x => x.Elements(W.tblPr)).ToArray();
+		        Assert.Single(stylesWithTblProperty);
+		        var borders = stylesWithTblProperty[0].Elements(W.tblBorders).Elements().ToArray();
+		        Assert.Single(borders, b => b.Name == W.top);
+		        Assert.Single(borders, b => b.Name == W.left);
+		        Assert.Single(borders, b => b.Name == W.bottom);
+		        Assert.Single(borders, b => b.Name == W.right);
+		        Assert.Single(borders, b => b.Name == W.insideH);
+		        Assert.Single(borders, b => b.Name == W.insideV);
+	        }
+        }
+
         private void Validate(FileInfo fi)
         {
             using (WordprocessingDocument wDoc = WordprocessingDocument.Open(fi.FullName, true))

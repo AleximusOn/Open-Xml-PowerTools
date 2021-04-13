@@ -1739,7 +1739,20 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
                         if (! newIds.ContainsKey(fromId))
                             newIds.Add(fromId, toId);
                     }
-                }
+#if MergeStylesWithSameNames
+					else if (!StylesAreEqual(style, toStyle))
+					{
+						toId += style.Attributes(W.rsid).FirstOrDefault()?.Value ?? Guid.NewGuid().ToString("N").Substring(24);
+						var newStyle = new XElement(style);
+						newStyle.Attribute(W.styleId).SetValue(toId);
+						toStyles.Root.Add(newStyle);
+						if (!newIds.ContainsKey(fromId))
+						{
+							newIds.Add(fromId, toId);
+						}
+					} 
+#endif
+				}
             }
 
 #if MergeStylesWithSameNames
@@ -1870,6 +1883,16 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             {
                 ConvertToNewId(item, newIds);
             }
+        }
+
+        private static bool StylesAreEqual(XElement element1, XElement element2)
+        {
+	        var compare1 = new XElement(element1);
+	        var compare2 = new XElement(element2);
+	        compare1.DescendantsAndSelf(W.rsid).Remove();
+	        compare2.DescendantsAndSelf(W.rsid).Remove();
+
+	        return XNode.DeepEquals(compare1, compare2);
         }
 #endif
 
