@@ -1767,18 +1767,19 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
 							.FirstOrDefault()
 							?.Attribute(W.val)
 							?.Value;
-						toId += styleRsid ?? Guid.NewGuid().ToString("N").Substring(24);
-						if (fromId == toId || toStylesDict.ContainsKey(toId))
+						var altToId = toId + styleRsid ?? Guid.NewGuid().ToString("N").Substring(24);
+						if (fromId == altToId || toStylesDict.ContainsKey(altToId))
 						{
+							SetNewIdToElements(newContent, toId, altToId);
 							continue;
 						}
 						var newStyle = new XElement(style);
-						newStyle.Attribute(W.styleId).SetValue(toId);
+						newStyle.Attribute(W.styleId).SetValue(altToId);
 						toStyles.Root.Add(newStyle);
 						AddStyleToDictionary(toStylesDict, newStyle);
 						if (!newIds.ContainsKey(fromId))
 						{
-							newIds.Add(fromId, toId);
+							newIds.Add(fromId, altToId);
 						}
 					} 
 #endif
@@ -1795,15 +1796,9 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
 					ConvertToNewId(style.Element(W.basedOn), newIds);
 					ConvertToNewId(style.Element(W.next), newIds);
 				}
-
-				foreach (var item in newContent.DescendantsAndSelf()
-					.Where(d => d.Name == W.pStyle ||
-								d.Name == W.rStyle ||
-								d.Name == W.tblStyle))
-				{
-					ConvertToNewId(item, newIds);
-				}
-
+				
+				SetNewIdToElements(newContent, newIds);
+				
 				if (newDocument.MainDocumentPart.NumberingDefinitionsPart != null)
 				{
 					var newNumbering = newDocument.MainDocumentPart.NumberingDefinitionsPart.GetXDocument();
@@ -1818,6 +1813,26 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
 				}
 			}
 #endif
+		}
+
+		private static void SetNewIdToElements(IEnumerable<XElement> newContent, string oldId, string newId)
+		{
+			var newIds = new Dictionary<string, string>
+			{
+				{ oldId, newId }
+			};
+			SetNewIdToElements(newContent, newIds);
+		}
+
+		private static void SetNewIdToElements(IEnumerable<XElement> newContent, Dictionary<string, string> newIds)
+		{
+			foreach (var item in newContent.DescendantsAndSelf()
+				.Where(d => d.Name == W.pStyle ||
+				            d.Name == W.rStyle ||
+				            d.Name == W.tblStyle))
+			{
+				ConvertToNewId(item, newIds);
+			}
 		}
 
 		private static void AddStyleToDictionary(Dictionary<string, XElement> stylesDictionary, XElement newStyle)
