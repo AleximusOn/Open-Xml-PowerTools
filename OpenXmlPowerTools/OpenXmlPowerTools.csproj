@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net45;net46;netstandard2.0</TargetFrameworks>
-    <Version>4.5.1</Version>
+    <Version>4.5.1.2</Version>
     <Description>Custom build of https://github.com/EricWhiteDev/Open-Xml-PowerTools with fix: merge table border styles
 last original commit c2dabce7f3b3dc49a2e2916141e34116eb253e0b</Description>
     <PackageId>OpenXmlPowerTools.CaseOne</PackageId>
