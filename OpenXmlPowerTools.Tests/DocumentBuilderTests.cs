@@ -895,28 +895,116 @@ namespace OxPt
 	        }
         }
 
+        [Theory]
+        [InlineData(1,1,2)]
+        [InlineData(1,2,1)]
+        [InlineData(2,1,1)]
+        [InlineData(2,1,2)]
+        [InlineData(2,2,1)]
+        public void DB017b_MergeTableWithSameName_Handling(params int[] sourcesIndexes)
+        {
+	        var sourceDir = new DirectoryInfo("../../../../TestFiles/");
+            var fileInfos = sourcesIndexes
+	            .Select(i => new FileInfo(Path.Combine(sourceDir.FullName, $"DB017_MergeTableWithSameName_Handling_Source{i}.docx")))
+	            .ToArray();
+            var resultFilePostfix = string.Join("_", sourcesIndexes);
+	        var processedDestDocx = new FileInfo(Path.Combine(TestUtil.TempDir.FullName, $"{nameof(DB017b_MergeTableWithSameName_Handling)}_Result_{resultFilePostfix}.docx"));
+
+
+            var processedDoc = new MemoryStream();
+
+	        using (var sourceDoc1 = ReadFileToMemoryStream(fileInfos[0]))
+	        using (var sourceDoc2 = ReadFileToMemoryStream(fileInfos[1]))
+	        {
+		        var sources = new List<Source>()
+		        {
+			        new Source(new WmlDocument(string.Empty, sourceDoc1)),
+			        new Source(new WmlDocument(string.Empty, sourceDoc2))
+		        };
+                var document = DocumentBuilder.BuildDocument(sources);
+		        var resultStream = new MemoryStream(document.DocumentByteArray);
+                resultStream.CopyTo(processedDoc);
+		        Validate(resultStream);
+            }
+
+
+	        using (var sourceDoc3 = ReadFileToMemoryStream(fileInfos[2]))
+	        {
+		        var sources = new List<Source>()
+		        {
+			        new Source(new WmlDocument(string.Empty, processedDoc)),
+			        new Source(new WmlDocument(string.Empty, sourceDoc3))
+		        };
+		        DocumentBuilder.BuildDocument(sources, processedDestDocx.FullName);
+		        Validate(processedDestDocx);
+
+				using (WordprocessingDocument wDoc = WordprocessingDocument.Open(processedDestDocx.FullName, false))
+				{
+					var expectedTblStyleWithBorderCount = sourcesIndexes.Count(n => n == 2);
+
+                    var styles = wDoc.MainDocumentPart.StyleDefinitionsPart.GetXDocument().Root.Elements(W.style).ToArray();
+					var allTableStyles = styles.Where(e => e.Attribute(W.styleId).Value.StartsWith("a4")).ToArray();
+					Assert.Equal(2, allTableStyles.Length);
+                    var stylesWithTblProperty = allTableStyles.SelectMany(x => x.Elements(W.tblPr)).ToArray();
+					Assert.Single(stylesWithTblProperty);
+					var borders = stylesWithTblProperty[0].Elements(W.tblBorders).Elements().ToArray();
+					Assert.Single(borders, b => b.Name == W.top);
+					Assert.Single(borders, b => b.Name == W.left);
+					Assert.Single(borders, b => b.Name == W.bottom);
+					Assert.Single(borders, b => b.Name == W.right);
+					Assert.Single(borders, b => b.Name == W.insideH);
+					Assert.Single(borders, b => b.Name == W.insideV);
+				}
+			}
+        }
+
+
+        private static MemoryStream ReadFileToMemoryStream(FileInfo fileInfo)
+        {
+	        MemoryStream result = new MemoryStream();
+	        using (var file = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read))
+	        {
+		        file.CopyTo(result);
+	        }
+
+	        return result;
+        }
+
         private void Validate(FileInfo fi)
         {
             using (WordprocessingDocument wDoc = WordprocessingDocument.Open(fi.FullName, true))
             {
-                OpenXmlValidator v = new OpenXmlValidator();
-                var errors = v.Validate(wDoc).Where(ve =>
-                {
-                    var found = s_ExpectedErrors.Any(xe => ve.Description.Contains(xe));
-                    return !found;
-                });
-
-                if (errors.Count() != 0)
-                {
-                    StringBuilder sb = new StringBuilder();
-                    foreach (var item in errors)
-                    {
-                        sb.Append(item.Description).Append(Environment.NewLine);
-                    }
-                    var s = sb.ToString();
-                    Assert.True(false, s);
-                }
+                Validate(wDoc);
             }
+        }
+
+        private void Validate(MemoryStream memoryStream)
+        {
+	        using (WordprocessingDocument wDoc = WordprocessingDocument.Open(memoryStream, true))
+	        {
+		        Validate(wDoc);
+	        }
+        }
+
+        public void Validate(WordprocessingDocument wDoc)
+        {
+	        OpenXmlValidator v = new OpenXmlValidator();
+	        var errors = v.Validate(wDoc).Where(ve =>
+	        {
+		        var found = s_ExpectedErrors.Any(xe => ve.Description.Contains(xe));
+		        return !found;
+	        });
+
+	        if (errors.Count() != 0)
+	        {
+		        StringBuilder sb = new StringBuilder();
+		        foreach (var item in errors)
+		        {
+			        sb.Append(item.Description).Append(Environment.NewLine);
+		        }
+		        var s = sb.ToString();
+		        Assert.True(false, s);
+	        }
         }
 
         private static List<string> s_ExpectedErrors = new List<string>()

@@ -1536,15 +1536,18 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
             if (fromStyles.Root == null)
                 return;
 
+            var toStylesDict = StylesToDictionaryByNameAndId(toStyles);
+
             foreach (XElement style in fromStyles.Root.Elements(W.style))
             {
                 var fromId = (string)style.Attribute(W.styleId);
                 var fromName = (string)style.Elements(W.name).Attributes(W.val).FirstOrDefault();
 
-                var toStyle = toStyles
-                    .Root
-                    .Elements(W.style)
-                    .FirstOrDefault(st => (string)st.Elements(W.name).Attributes(W.val).FirstOrDefault() == fromName);
+                XElement toStyle = null;
+                if (!toStylesDict.TryGetValue(fromId, out toStyle))
+                {
+	                toStylesDict.TryGetValue(fromName, out toStyle);
+                }
 
                 if (toStyle == null)
                 {
@@ -1730,23 +1733,50 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
                     newStyle.Descendants().Where(d => d.Name.NamespaceName != W.w).Remove();
                     newStyle.Descendants().Attributes().Where(d => d.Name.NamespaceName != W.w).Remove();
                     toStyles.Root.Add(newStyle);
+                    AddStyleToDictionary(toStylesDict, newStyle);
                 }
                 else
                 {
                     var toId = (string)toStyle.Attribute(W.styleId);
                     if (fromId != toId)
                     {
-                        if (! newIds.ContainsKey(fromId))
-                            newIds.Add(fromId, toId);
+	                    var styleRsid = style.Descendants(W.rsid)
+		                    .FirstOrDefault()
+		                    ?.Attribute(W.val)
+		                    ?.Value;
+	                    var altToId = toId + styleRsid ?? "";
+	                    if (altToId == fromId)
+	                    {
+		                    if (!toStylesDict.ContainsKey(altToId))
+		                    {
+			                    var newStyle = new XElement(style);
+			                    newStyle.Attribute(W.styleId).SetValue(altToId);
+			                    toStyles.Root.Add(newStyle);
+			                    AddStyleToDictionary(toStylesDict, newStyle);
+                            }
+	                    }
+                        else if (!newIds.ContainsKey(fromId))
+                        {
+	                        newIds.Add(fromId, toId);
+                        }
                     }
 #if MergeStylesWithSameNames
-					else if (!StylesAreEqual(style, toStyle))
+					else if (fromId == toId && !StylesAreEqual(style, toStyle))
 					{
-						toId += style.Attributes(W.rsid).FirstOrDefault()?.Value ?? Guid.NewGuid().ToString("N").Substring(24);
+                        var styleRsid = style.Descendants(W.rsid)
+							.FirstOrDefault()
+							?.Attribute(W.val)
+							?.Value;
+	                    toId += styleRsid ?? Guid.NewGuid().ToString("N").Substring(24);
+						if (fromId == toId || toStylesDict.ContainsKey(toId))
+						{
+							continue;
+						}
 						var newStyle = new XElement(style);
 						newStyle.Attribute(W.styleId).SetValue(toId);
 						toStyles.Root.Add(newStyle);
-						if (!newIds.ContainsKey(fromId))
+						AddStyleToDictionary(toStylesDict, newStyle);
+                        if (!newIds.ContainsKey(fromId))
 						{
 							newIds.Add(fromId, toId);
 						}
@@ -1788,6 +1818,48 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
                 }
             }
 #endif
+        }
+
+        private static void AddStyleToDictionary(Dictionary<string, XElement> stylesDictionary, XElement newStyle)
+        {
+	        var styleName = (string) newStyle.Element(W.name)?.Attribute(W.val);
+	        var styleId = (string) newStyle.Attribute(W.styleId);
+	        if (!string.IsNullOrEmpty(styleName) && !stylesDictionary.ContainsKey(styleName))
+	        {
+		        stylesDictionary.Add(styleName, newStyle);
+	        }
+	        if (!string.IsNullOrEmpty(styleId) && !stylesDictionary.ContainsKey(styleId))
+	        {
+		        stylesDictionary.Add(styleId, newStyle);
+	        }
+        }
+
+        private static Dictionary<string, XElement> StylesToDictionaryByNameAndId(XDocument styles)
+        {
+	        var allStyles = styles
+		        .Root
+		        .Elements(W.style)
+		        .Select(s => new
+		        {
+			        StyleName = (string) s.Element(W.name)?.Attribute(W.val),
+			        StyleId = (string) s.Attribute(W.styleId),
+			        Style = s
+		        }).ToArray();
+
+	        var result = new Dictionary<string, XElement>();
+	        foreach (var style in allStyles)
+	        {
+		        if (!string.IsNullOrEmpty(style.StyleName) && !result.ContainsKey(style.StyleName))
+		        {
+			        result.Add(style.StyleName, style.Style);
+		        }
+		        if (!string.IsNullOrEmpty(style.StyleId) && !result.ContainsKey(style.StyleId))
+		        {
+			        result.Add(style.StyleId, style.Style);
+		        }
+            }
+
+	        return result;
         }
 
         private static void MergeLatentStyles(XDocument fromStyles, XDocument toStyles)
@@ -1892,7 +1964,10 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
 	        compare1.DescendantsAndSelf(W.rsid).Remove();
 	        compare2.DescendantsAndSelf(W.rsid).Remove();
 
-	        return XNode.DeepEquals(compare1, compare2);
+	        compare1.DescendantsAndSelf(W.styleId).Remove();
+	        compare2.DescendantsAndSelf(W.styleId).Remove();
+
+            return XNode.DeepEquals(compare1, compare2);
         }
 #endif
 
