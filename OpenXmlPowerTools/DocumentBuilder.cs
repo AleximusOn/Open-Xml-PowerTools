@@ -1775,6 +1775,12 @@ application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml
 						}
 						var newStyle = new XElement(style);
 						newStyle.Attribute(W.styleId).SetValue(altToId);
+						var styleName = newStyle.Element(W.name);
+						if (styleName != null)
+						{
+							var value = styleName.Attribute(W.val);
+							value.SetValue($"{value} ({altToId})");
+						}
 						toStyles.Root.Add(newStyle);
 						AddStyleToDictionary(toStylesDict, newStyle);
 						if (!newIds.ContainsKey(fromId))

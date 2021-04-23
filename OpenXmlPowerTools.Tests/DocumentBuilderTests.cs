@@ -970,6 +970,68 @@ namespace OxPt
 			
 		}
 
+		/// <summary>
+		/// Test generates result file got manual review
+		/// See DB017b_MergeTableWithSameName_Handling_Result.docx
+		/// </summary>
+		[Fact]
+		public void DB017c_MergeTableWithSameName_Handling()
+		{
+			var sourceDir = new DirectoryInfo("../../../../TestFiles/");
+			var fileNames = new[]
+			{
+				"DB017c_MergeTableWithSameName_Bill.docx",
+				"DB017c_MergeTableWithSameName_WithoutBorders.docx",
+				"DB017c_MergeTableWithSameName_SolidBorders.docx",
+				"DB017c_MergeTableWithSameName_WithoutBorders.docx",
+				"DB017c_MergeTableWithSameName_SolidBorders.docx",
+			};
+			var fileInfos = fileNames
+				.Select(fileName => new FileInfo(Path.Combine(sourceDir.FullName, fileName)))
+				.ToArray();
+			var resultDocxFileInfo = new FileInfo(Path.Combine(TestUtil.TempDir.FullName, $"{nameof(DB017b_MergeTableWithSameName_Handling)}_Result.docx"));
+
+			MemoryStream resultDocx = null;
+
+			int index = 0;
+			foreach (FileInfo fileInfo in fileInfos)
+			{
+				index++;
+				var docxStream = ReadFileToMemoryStream(fileInfo);
+				if (resultDocx == null)
+				{
+					resultDocx = new MemoryStream();
+					docxStream.CopyTo(resultDocx);
+				}
+				else
+				{
+					var source1Buffer = resultDocx.ToArray();
+					var source2Buffer = docxStream.ToArray();
+					using (var source1 = new MemoryStream(source1Buffer, 0, source1Buffer.Length, false, publiclyVisible: true))
+					using (var source2 = new MemoryStream(source2Buffer, 0, source2Buffer.Length, false, publiclyVisible: true))
+					{
+						var sources = new List<Source>
+						{
+							new Source(new WmlDocument(string.Empty, source1)),
+							new Source(new WmlDocument(string.Empty, source2))
+						};
+						var mergedDocx = DocumentBuilder.BuildDocument(sources);
+						var mergedDocxStream = new MemoryStream(mergedDocx.DocumentByteArray);
+						Validate(mergedDocxStream);
+						resultDocx.Dispose();
+						resultDocx = mergedDocxStream;
+					}
+				}
+				resultDocx.Seek(0, SeekOrigin.Begin);
+			}
+
+			resultDocx.Seek(0, SeekOrigin.Begin);
+			using (var fileStream = new FileStream(resultDocxFileInfo.FullName, FileMode.Create, FileAccess.Write))
+			{
+				resultDocx.WriteTo(fileStream);
+			}
+		}
+
 		private static MemoryStream ReadFileToMemoryStream(FileInfo fileInfo)
 		{
 			MemoryStream result = new MemoryStream();
